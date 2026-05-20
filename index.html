@@ -136,7 +136,7 @@
 </div>
 
 <script>
-  let audioCtx;
+let audioCtx;
   const BASE_A = 442;
   const MAX_QUESTIONS = 10;
   
@@ -150,11 +150,9 @@
   let currentMidiNote = 60;
   let currentDeviationCents = 0;
   
-  // 音色設定用
-  let selectedWaveform = 'sawtooth';
+  let selectedWaveform = 'brass';
   let selectedWaveformName = '';
 
-  // ★音が重ならないようにするための変数
   let activeOscillator = null;
 
   const startScreen = document.getElementById('start-screen');
@@ -178,15 +176,26 @@
   const fbDetailText = document.getElementById('feedback-detail-text');
   const btnCorrectAfter = document.getElementById('btn-play-correct-after');
 
-  // 音を鳴らす関数（金管・木管シミュレーター 修正版）
+  // ★追加：安全に音を止める専用の関数
+  function stopActiveOscillator() {
+    if (activeOscillator) {
+      try {
+        // すでに鳴り終わっている音をstopするとエラーが出るため、try-catchで保護する
+        activeOscillator.stop();
+      } catch (e) {
+        // エラーが出ても無視して処理を続ける
+      }
+      activeOscillator.disconnect();
+      activeOscillator = null;
+    }
+  }
+
   function playTone(midiNote, cents = 0) {
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
     
-    if (activeOscillator) {
-      activeOscillator.stop();
-      activeOscillator.disconnect();
-    }
+    // 前の音を安全に止める
+    stopActiveOscillator();
     
     const freq = BASE_A * Math.pow(2, (midiNote - 69) / 12);
     const finalFreq = freq * Math.pow(2, cents / 1200);
@@ -195,15 +204,12 @@
     const gainNode = audioCtx.createGain();
     const filter = audioCtx.createBiquadFilter();
 
-    // ！！！この1行が抜けていました！！！
     osc.frequency.value = finalFreq;
 
     const duration = 3.5;
     const t = audioCtx.currentTime;
 
-    // --- 音色（シンセサイズ）の分岐処理 ---
     if (selectedWaveform === 'brass') {
-      // 🎺 金管楽器風
       osc.type = 'sawtooth';
       filter.type = 'lowpass';
       
@@ -218,7 +224,6 @@
       gainNode.gain.linearRampToValueAtTime(0, t + duration);
 
     } else if (selectedWaveform === 'woodwind') {
-      // 🎷 木管楽器風
       osc.type = 'square';
       filter.type = 'lowpass';
       
@@ -231,7 +236,6 @@
       gainNode.gain.linearRampToValueAtTime(0, t + duration);
     }
 
-    // 接続して出力
     osc.connect(filter);
     filter.connect(gainNode);
     gainNode.connect(audioCtx.destination);
@@ -241,6 +245,7 @@
     
     activeOscillator = osc;
   }
+
   function getNoteName(midiNote) {
     const pc = midiNote % 12;
     const octave = Math.floor(midiNote / 12) - 1;
@@ -248,10 +253,9 @@
   }
 
   function generateQuestion() {
-    // 画面の初期化
     inputArea.classList.remove('hidden');
     feedbackArea.classList.add('hidden');
-    btnCorrect.classList.remove('hidden'); // 一旦両方のボタンを表示
+    btnCorrect.classList.remove('hidden'); 
     btnQuestion.classList.remove('hidden');
 
     let note;
@@ -280,7 +284,7 @@
       uiHighLow.classList.remove('hidden');
       uiSlider.classList.add('hidden');
     } else if (currentLevel === 2) {
-      btnCorrect.classList.add('hidden'); // Lv2は最初「正しい音」を隠す
+      btnCorrect.classList.add('hidden'); 
       uiHighLow.classList.remove('hidden');
       uiSlider.classList.add('hidden');
     } else if (currentLevel === 3) {
@@ -289,14 +293,11 @@
     }
   }
 
-  // --- イベントリスナー ---
-
   document.getElementById('btn-start').addEventListener('click', () => {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
     
-    // 音色とレベルの取得
     const waveRadios = document.getElementsByName('waveform');
     for (let r of waveRadios) {
       if (r.checked) {
@@ -327,21 +328,18 @@
     centValue.textContent = e.target.value > 0 ? "+" + e.target.value : e.target.value;
   });
 
-  // --- 解答処理 (アラート廃止・インページ表示化) ---
-
   window.answerHighLow = function(answer) {
     let isCorrect = false;
-    
     if (answer === 'high' && currentDeviationCents > 0) isCorrect = true;
     else if (answer === 'low' && currentDeviationCents < 0) isCorrect = true;
     else if (answer === 'perfect' && currentDeviationCents === 0) isCorrect = true;
     
     if (isCorrect) {
       correctCount++;
-      fbResultText.textContent = "正解！";
+      fbResultText.textContent = "正解！ ⭕";
       fbResultText.className = "feedback-text correct-msg";
     } else {
-      fbResultText.textContent = "残念...";
+      fbResultText.textContent = "残念... ❌";
       fbResultText.className = "feedback-text wrong-msg";
     }
     
@@ -365,18 +363,12 @@
   };
 
   function showFeedback() {
-    // 解答ボタンを隠して、フィードバックエリアを表示
     inputArea.classList.add('hidden');
     feedbackArea.classList.remove('hidden');
     
-    // 現在鳴っている音を止める（スッキリさせるため）
-    if (activeOscillator) {
-      activeOscillator.stop();
-      activeOscillator.disconnect();
-      activeOscillator = null;
-    }
+    // 安全に音を止める
+    stopActiveOscillator();
 
-    // Lv2の場合は「正解の音を聴き直す」ボタンを表示する
     if (currentLevel === 2) {
       btnCorrectAfter.classList.remove('hidden');
     } else {
@@ -384,14 +376,9 @@
     }
   }
 
-  // 「次の問題へ」ボタンが押された時
   window.nextQuestion = function() {
-    // 音を止める
-    if (activeOscillator) {
-      activeOscillator.stop();
-      activeOscillator.disconnect();
-      activeOscillator = null;
-    }
+    // 安全に音を止める
+    stopActiveOscillator();
 
     currentQuestion++;
     if (currentQuestion > MAX_QUESTIONS) {
@@ -411,18 +398,13 @@
 
     if (currentLevel === 1 || currentLevel === 2) {
       resultText.textContent = `${correctCount} / ${MAX_QUESTIONS} 問 正解！`;
-      if (correctCount >= 10) feedbackText.textContent = "やばいばい！";
-      else if (correctCount >= 8) feedbackText.textContent = "すばらしい音感です！";
-    　else if (correctCount >= 6) feedbackText.textContent = "いい音感です！";
-      else feedbackText.textContent = "しゃばいばい！";
+      if (correctCount >= 8) feedbackText.textContent = "素晴らしい音感です！";
+      else feedbackText.textContent = "この調子でトレーニングを続けましょう！";
     } else {
       resultText.textContent = `合計スコア: ${totalScore} / 1000 点`;
-      if (totalScore >= 950) feedbackText.textContent = "やばいばい！";
-      else if (totalScore >= 900) feedbackText.textContent = "えぐいピッチ感です！";
-      else if (totalScore >= 800) feedbackText.textContent = "すばらしいピッチ感です！";
-      else if (totalScore >= 700) feedbackText.textContent = "いいピッチ感です！";
-      else if (totalScore >= 500) feedbackText.textContent = "そこそこのピッチ感です！";
-      else feedbackText.textContent = "しゃばいばい！";
+      if (totalScore >= 800) feedbackText.textContent = "驚異的なピッチ感です！";
+      else if (totalScore >= 500) feedbackText.textContent = "なかなか良い耳を持っていますね！";
+      else feedbackText.textContent = "日々のチューニング感覚を研ぎ澄ませていきましょう！";
     }
     
     resultWaveformText.textContent = `プレイ環境: Lv${currentLevel} / 使用音色: ${selectedWaveformName}`;
