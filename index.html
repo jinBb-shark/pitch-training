@@ -178,7 +178,7 @@
   const fbDetailText = document.getElementById('feedback-detail-text');
   const btnCorrectAfter = document.getElementById('btn-play-correct-after');
 
-  // 音を鳴らす関数（金管・木管シミュレーター搭載版）
+  // 音を鳴らす関数（金管・木管シミュレーター 修正版）
   function playTone(midiNote, cents = 0) {
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -195,48 +195,38 @@
     const gainNode = audioCtx.createGain();
     const filter = audioCtx.createBiquadFilter();
 
+    // ！！！この1行が抜けていました！！！
+    osc.frequency.value = finalFreq;
+
     const duration = 3.5;
     const t = audioCtx.currentTime;
 
     // --- 音色（シンセサイズ）の分岐処理 ---
     if (selectedWaveform === 'brass') {
-      // 🎺 金管楽器風（トロンボーン・トランペットなど）
-      osc.type = 'sawtooth'; // 倍音豊かなノコギリ波
+      // 🎺 金管楽器風
+      osc.type = 'sawtooth';
       filter.type = 'lowpass';
       
-      // 金管特有の「息を入れてから音が開く」表現（フィルターエンベロープ）
-      filter.frequency.setValueAtTime(600, t); // 最初はこもった音
-      filter.frequency.linearRampToValueAtTime(3000, t + 0.1); // 0.1秒で明るく弾ける
-      filter.frequency.exponentialRampToValueAtTime(800, t + duration); // 減衰と共に落ち着く
+      filter.frequency.setValueAtTime(600, t);
+      filter.frequency.linearRampToValueAtTime(3000, t + 0.1);
+      filter.frequency.exponentialRampToValueAtTime(800, t + duration);
 
-      // 金管の息づかい（ボリュームエンベロープ）
       gainNode.gain.setValueAtTime(0, t);
-      gainNode.gain.linearRampToValueAtTime(0.3, t + 0.08); // アタック少し重め
-      gainNode.gain.exponentialRampToValueAtTime(0.2, t + 0.3); // 落ち着く
-      gainNode.gain.linearRampToValueAtTime(0.15, t + duration - 0.5); // ロングトーン
-      gainNode.gain.linearRampToValueAtTime(0, t + duration); // リリース
-
-    } else if (selectedWaveform === 'woodwind') {
-      // 🎷 木管楽器風（クラリネット寄り）
-      osc.type = 'square'; // 中空な響きの矩形波
-      filter.type = 'lowpass';
-      
-      // 高音をバッサリ切って丸く温かい音にする
-      filter.frequency.value = 800; 
-
-      // 木管の息づかい（ボリュームエンベロープ）
-      gainNode.gain.setValueAtTime(0, t);
-      gainNode.gain.linearRampToValueAtTime(0.2, t + 0.05); // アタック早め・軽め
-      gainNode.gain.exponentialRampToValueAtTime(0.15, t + 0.2);
+      gainNode.gain.linearRampToValueAtTime(0.3, t + 0.08);
+      gainNode.gain.exponentialRampToValueAtTime(0.2, t + 0.3);
       gainNode.gain.linearRampToValueAtTime(0.15, t + duration - 0.5);
       gainNode.gain.linearRampToValueAtTime(0, t + duration);
 
-    } else {
-      // 💧 サイン波（純音）
-      osc.type = 'sine';
-      filter.type = 'allpass'; // フィルターを通さない
+    } else if (selectedWaveform === 'woodwind') {
+      // 🎷 木管楽器風
+      osc.type = 'square';
+      filter.type = 'lowpass';
+      
+      filter.frequency.value = 800; 
+
       gainNode.gain.setValueAtTime(0, t);
       gainNode.gain.linearRampToValueAtTime(0.2, t + 0.05);
+      gainNode.gain.exponentialRampToValueAtTime(0.15, t + 0.2);
       gainNode.gain.linearRampToValueAtTime(0.15, t + duration - 0.5);
       gainNode.gain.linearRampToValueAtTime(0, t + duration);
     }
@@ -251,7 +241,6 @@
     
     activeOscillator = osc;
   }
-
   function getNoteName(midiNote) {
     const pc = midiNote % 12;
     const octave = Math.floor(midiNote / 12) - 1;
